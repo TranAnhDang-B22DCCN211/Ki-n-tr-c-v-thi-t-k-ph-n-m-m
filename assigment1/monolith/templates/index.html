@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Store Demo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .book-card { transition: 0.3s; }
+        .book-card:hover { transform: translateY(-5px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container py-5">
+    <h1 class="text-center mb-4">📚 Book Store System</h1>
+
+    <div id="login-section" class="card p-4 mx-auto shadow" style="max-width: 400px;">
+        <h3 class="text-center">Đăng Nhập</h3>
+        <div class="mb-3">
+            <label>Username</label>
+            <input type="text" id="username" class="form-control" placeholder="shu">
+        </div>
+        <div class="mb-3">
+            <label>Password</label>
+            <input type="password" id="password" class="form-control" placeholder="******">
+        </div>
+        <button onclick="handleLogin()" class="btn btn-primary w-100">Login</button>
+        <p class="mt-2 text-center text-muted">Chưa có nick? Dùng API Register tạo trước nhé.</p>
+    </div>
+
+    <div id="shop-section" class="hidden">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4>Xin chào, <span id="user-display" class="text-primary fw-bold">User</span>!</h4>
+            <button onclick="loadCart()" class="btn btn-warning position-relative" data-bs-toggle="modal" data-bs-target="#cartModal">
+                🛒 Giỏ hàng
+            </button>
+        </div>
+
+        <div class="row" id="book-list">
+            </div>
+    </div>
+</div>
+
+<div class="modal fade" id="cartModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Giỏ hàng của bạn</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul id="cart-items" class="list-group">
+                    <li class="list-group-item text-center">Đang tải...</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // --- 1. XỬ LÝ LOGIN ---
+    async function handleLogin() {
+        const u = document.getElementById('username').value;
+        const p = document.getElementById('password').value;
+
+        try {
+            const res = await fetch('/api/login/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                alert('Đăng nhập thành công!');
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('shop-section').classList.remove('hidden');
+                document.getElementById('user-display').innerText = data.user || u;
+                loadBooks(); // Tải sách ngay khi login xong
+            } else {
+                alert('Sai tài khoản hoặc mật khẩu!');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối Server');
+        }
+    }
+
+    // --- 2. TẢI DANH SÁCH SÁCH ---
+    async function loadBooks() {
+        const res = await fetch('/api/books/');
+        const books = await res.json();
+        const container = document.getElementById('book-list');
+        container.innerHTML = '';
+
+        books.forEach(book => {
+            const html = `
+                <div class="col-md-4 mb-4">
+                    <div class="card book-card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">${book.title}</h5>
+                            <h6 class="card-subtitle mb-2 text-muted">${book.author}</h6>
+                            <p class="card-text text-success fw-bold">${parseFloat(book.price).toLocaleString()} đ</p>
+                            <p class="small text-muted">Kho: ${book.stock}</p>
+                            <button onclick="addToCart(${book.id})" class="btn btn-outline-primary w-100">
+                                + Thêm vào giỏ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += html;
+        });
+    }
+
+    // --- 3. THÊM VÀO GIỎ ---
+    async function addToCart(bookId) {
+        const res = await fetch('/api/cart/add/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ book_id: bookId, quantity: 1 })
+        });
+        
+        if (res.ok) {
+            alert('Đã thêm vào giỏ! 🛒');
+        } else {
+            alert('Lỗi: Không thể thêm vào giỏ.');
+        }
+    }
+
+    // --- 4. XEM GIỎ HÀNG ---
+    async function loadCart() {
+        const res = await fetch('/api/cart/');
+        const data = await res.json();
+        const list = document.getElementById('cart-items');
+        list.innerHTML = '';
+
+        if (!data.items || data.items.length === 0) {
+            list.innerHTML = '<li class="list-group-item text-center">Giỏ hàng trống</li>';
+            return;
+        }
+
+        data.items.forEach(item => {
+            // Xử lý hiển thị tùy theo version Monolith hay Clean (cấu trúc JSON có thể lệch xíu)
+            const title = item.book.title || "Sách ID " + item.book_id;
+            const price = item.book.price || 0;
+            
+            list.innerHTML += `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${title}</strong>
+                        <div class="small text-muted">Số lượng: ${item.quantity}</div>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">
+                        ${(price * item.quantity).toLocaleString()} đ
+                    </span>
+                </li>
+            `;
+        });
+    }
+</script>
+</body>
+</html>
